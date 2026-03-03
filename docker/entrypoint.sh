@@ -16,8 +16,8 @@ case "${RUN_MODE:-cron}" in
     exec /usr/local/bin/python -m trendradar
     ;;
 "cron")
-    # 生成 crontab
-    echo "${CRON_SCHEDULE:-*/30 * * * *} cd /app && /usr/local/bin/python -m trendradar" > /tmp/crontab
+    # 生成 crontab（添加 15 分钟超时保护）
+    echo "${CRON_SCHEDULE:-*/30 * * * *} cd /app && timeout 900 /usr/local/bin/python -m trendradar" > /tmp/crontab
     
     echo "📅 生成的crontab内容:"
     cat /tmp/crontab

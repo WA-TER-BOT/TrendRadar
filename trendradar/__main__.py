@@ -920,6 +920,12 @@ class NewsAnalyzer:
                         current_results=current_results, schedule=schedule
                     )
 
+            # 对分类进行 AI 总结（如果启用）
+            ai_config = cfg.get("AI_ANALYSIS", {})
+            if ai_config.get("ENABLED", False) and ai_config.get("CATEGORY_SUMMARY", False):
+                from category_summarizer import add_category_summaries
+                stats = add_category_summaries(stats, ai_config, enabled=True)
+
             # 准备报告数据
             report_data = self.ctx.prepare_report(stats, failed_ids, new_titles, id_to_name, mode)
 

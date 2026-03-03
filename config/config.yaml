@@ -374,7 +374,7 @@ ai:
   temperature: 1.0                  # 采样温度 (0.0-2.0)
                                     # 注意：部分模型(如 gpt-5)可能要求必须为 1.0，否则会报错
   
-  max_tokens: 5000                  # 最大生成 token 数
+  max_tokens: 8192                  # 最大生成 token 数（DeepSeek 上限 8192）
                                     # 注意：如果 API 不支持此参数(报 HTTP 400)，请设为 0 以禁用发送
   # 高级选项
   num_retries: 1                    # 失败重试次数
@@ -446,6 +446,10 @@ ai_analysis:
   include_rss: false                # 是否包含 RSS 内容进行分析
   
   include_standalone: true          # 是否将独立展示区数据纳入 AI 分析（只需上方 display 区的 standalone 配置了平台/RSS 即可）
+
+  category_summary: true            # 是否对每个分类单独进行 AI 总结（避免超过 token 限制）
+                                    # true: 每个分类单独总结（推荐，不会被截断）
+                                    # false: 关闭分类总结功能
 
   include_rank_timeline: true       # 是否传递完整排名时间线
                                     # false: 使用简化格式（排名范围+时间范围+出现次数）
