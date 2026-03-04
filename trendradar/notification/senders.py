@@ -410,23 +410,26 @@ def send_to_wework(
             }
 
     # 获取分批内容，预留批次头部空间
+    # 注意：AI 分析内容不包含在主批次中，将单独发送
     header_reserve = get_max_batch_header_size(header_format_type)
     batches = split_content_func(
         report_data, "wework", update_info, max_bytes=batch_size - header_reserve, mode=mode,
         rss_items=rss_items,
         rss_new_items=rss_new_items,
-        ai_content=ai_content,
+        ai_content=None,  # 不包含 AI 内容
         standalone_data=standalone_data,
-        ai_stats=ai_stats,
+        ai_stats=ai_stats,  # 保留统计数据显示在头部
         report_type=report_type,
     )
 
     # 统一添加批次头部（已预留空间，不会超限）
     batches = add_batch_headers(batches, header_format_type, batch_size)
 
-    print(f"{log_prefix}消息分为 {len(batches)} 批次发送 [{report_type}]")
+    # 计算总批次数（主内容 + AI分析）
+    total_batches = len(batches) + (1 if ai_content else 0)
+    print(f"{log_prefix}消息分为 {total_batches} 批次发送（主内容 {len(batches)} 批 + AI分析 {1 if ai_content else 0} 批）[{report_type}]")
 
-    # 逐批发送
+    # 逐批发送主内容
     for i, batch_content in enumerate(batches, 1):
         # 根据消息类型构建 payload
         if is_text_mode:
@@ -440,7 +443,7 @@ def send_to_wework(
             content_size = len(batch_content.encode("utf-8"))
 
         print(
-            f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
+            f"发送{log_prefix}第 {i}/{total_batches} 批次（主内容），大小：{content_size} 字节 [{report_type}]"
         )
 
         try:
@@ -450,25 +453,74 @@ def send_to_wework(
             if response.status_code == 200:
                 result = response.json()
                 if result.get("errcode") == 0:
-                    print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
+                    print(f"{log_prefix}第 {i}/{total_batches} 批次发送成功 [{report_type}]")
                     # 批次间间隔
-                    if i < len(batches):
+                    if i < len(batches) or ai_content:
                         time.sleep(batch_interval)
                 else:
                     print(
-                        f"{log_prefix}第 {i}/{len(batches)} 批次发送失败 [{report_type}]，错误：{result.get('errmsg')}"
+                        f"{log_prefix}第 {i}/{total_batches} 批次发送失败 [{report_type}]，错误：{result.get('errmsg')}"
                     )
                     return False
             else:
                 print(
-                    f"{log_prefix}第 {i}/{len(batches)} 批次发送失败 [{report_type}]，状态码：{response.status_code}"
+                    f"{log_prefix}第 {i}/{total_batches} 批次发送失败 [{report_type}]，状态码：{response.status_code}"
                 )
                 return False
         except Exception as e:
-            print(f"{log_prefix}第 {i}/{len(batches)} 批次发送出错 [{report_type}]：{e}")
+            print(f"{log_prefix}第 {i}/{total_batches} 批次发送出错 [{report_type}]：{e}")
             return False
 
-    print(f"{log_prefix}所有 {len(batches)} 批次发送完成 [{report_type}]")
+    # 单独发送 AI 分析内容
+    if ai_content:
+        ai_batch_num = len(batches) + 1
+
+        # 添加批次头部
+        if total_batches > 1:
+            if is_text_mode:
+                ai_header = f"[第 {ai_batch_num}/{total_batches} 批次]\n\n"
+            else:
+                ai_header = f"**[第 {ai_batch_num}/{total_batches} 批次]**\n\n"
+            ai_full_content = ai_header + ai_content
+        else:
+            ai_full_content = ai_content
+
+        # 根据消息类型构建 payload
+        if is_text_mode:
+            plain_ai_content = strip_markdown(ai_full_content)
+            ai_payload = {"msgtype": "text", "text": {"content": plain_ai_content}}
+            ai_content_size = len(plain_ai_content.encode("utf-8"))
+        else:
+            ai_payload = {"msgtype": "markdown", "markdown": {"content": ai_full_content}}
+            ai_content_size = len(ai_full_content.encode("utf-8"))
+
+        print(
+            f"发送{log_prefix}第 {ai_batch_num}/{total_batches} 批次（AI分析），大小：{ai_content_size} 字节 [{report_type}]"
+        )
+
+        try:
+            response = requests.post(
+                webhook_url, headers=headers, json=ai_payload, proxies=proxies, timeout=30
+            )
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("errcode") == 0:
+                    print(f"{log_prefix}第 {ai_batch_num}/{total_batches} 批次（AI分析）发送成功 [{report_type}]")
+                else:
+                    print(
+                        f"{log_prefix}第 {ai_batch_num}/{total_batches} 批次（AI分析）发送失败 [{report_type}]，错误：{result.get('errmsg')}"
+                    )
+                    return False
+            else:
+                print(
+                    f"{log_prefix}第 {ai_batch_num}/{total_batches} 批次（AI分析）发送失败 [{report_type}]，状态码：{response.status_code}"
+                )
+                return False
+        except Exception as e:
+            print(f"{log_prefix}第 {ai_batch_num}/{total_batches} 批次（AI分析）发送出错 [{report_type}]：{e}")
+            return False
+
+    print(f"{log_prefix}所有 {total_batches} 批次发送完成 [{report_type}]")
 
     return True
 
